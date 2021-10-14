@@ -16,32 +16,23 @@
 
 package android.view;
 
-import android.annotation.LayoutRes;
-import android.annotation.NonNull;
-import android.annotation.Nullable;
-import android.annotation.SystemService;
-import android.annotation.TestApi;
-import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
-import android.graphics.Canvas;
-import android.os.Build;
-import android.os.Handler;
-import android.os.Message;
-import android.os.Trace;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
 import android.util.Xml;
-import android.widget.FrameLayout;
 
-import com.android.internal.R;
+import androidx.annotation.LayoutRes;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.test.set_factory.R;
 
 import dalvik.system.PathClassLoader;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -52,29 +43,6 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Objects;
 
-/**
- * Instantiates a layout XML file into its corresponding {@link android.view.View}
- * objects. It is never used directly. Instead, use
- * {@link android.app.Activity#getLayoutInflater()} or
- * {@link Context#getSystemService} to retrieve a standard LayoutInflater instance
- * that is already hooked up to the current context and correctly configured
- * for the device you are running on.
- * <p>
- * To create a new LayoutInflater with an additional {@link Factory} for your
- * own views, you can use {@link #cloneInContext} to clone an existing
- * ViewFactory, and then call {@link #setFactory} on it to include your
- * Factory.
- * <p>
- * For performance reasons, view inflation relies heavily on pre-processing of
- * XML files that is done at build time. Therefore, it is not currently possible
- * to use LayoutInflater with an XmlPullParser over a plain XML file at runtime;
- * it only works with an XmlPullParser returned from a compiled resource
- * (R.<em>something</em> file.)
- * <p>
- * <strong>Note:</strong> This class is <strong>not</strong> thread-safe and a given
- * instance should only be accessed by a single thread.
- */
-@SystemService(Context.LAYOUT_INFLATER_SERVICE)
 public abstract class LayoutInflater {
 
     private static final String TAG = LayoutInflater.class.getSimpleName();
@@ -89,49 +57,21 @@ public abstract class LayoutInflater {
     /** Empty stack trace used to avoid log spam in re-throw exceptions. */
     private static final StackTraceElement[] EMPTY_STACK_TRACE = new StackTraceElement[0];
 
-    /**
-     * This field should be made private, so it is hidden from the SDK.
-     * {@hide}
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     protected final Context mContext;
-
-    // these are optional, set by the caller
-    /**
-     * If any developer has desire to change this value, they should instead use
-     * {@link #cloneInContext(Context)} and set the new factory in thew newly-created
-     * LayoutInflater.
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private boolean mFactorySet;
-    @UnsupportedAppUsage
     private Factory mFactory;
-    @UnsupportedAppUsage
     private Factory2 mFactory2;
-    @UnsupportedAppUsage
     private Factory2 mPrivateFactory;
     private Filter mFilter;
 
-    // Indicates whether we should try to inflate layouts using a precompiled layout instead of
-    // inflating from the XML resource.
     private boolean mUseCompiledView;
-    // This variable holds the classloader that will be used to look for precompiled layouts. The
-    // The classloader includes the generated compiled_view.dex file.
     private ClassLoader mPrecompiledClassLoader;
 
-    /**
-     * This is not a public API. Two APIs are now available to alleviate the need to access
-     * this directly: {@link #createView(Context, String, String, AttributeSet)} and
-     * {@link #onCreateView(Context, View, String, AttributeSet)}.
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     final Object[] mConstructorArgs = new Object[2];
 
-    @UnsupportedAppUsage
     static final Class<?>[] mConstructorSignature = new Class[] {
             Context.class, AttributeSet.class};
 
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769490)
     private static final HashMap<String, Constructor<? extends View>> sConstructorMap =
             new HashMap<String, Constructor<? extends View>>();
 
@@ -141,72 +81,25 @@ public abstract class LayoutInflater {
 
     private static final String TAG_MERGE = "merge";
     private static final String TAG_INCLUDE = "include";
-    private static final String TAG_1995 = "blink";
     private static final String TAG_REQUEST_FOCUS = "requestFocus";
     private static final String TAG_TAG = "tag";
 
     private static final String ATTR_LAYOUT = "layout";
 
-    @UnsupportedAppUsage
     private static final int[] ATTRS_THEME = new int[] {
-            com.android.internal.R.attr.theme };
+            android.R.attr.theme };
 
-    /**
-     * Hook to allow clients of the LayoutInflater to restrict the set of Views that are allowed
-     * to be inflated.
-     *
-     */
     public interface Filter {
-        /**
-         * Hook to allow clients of the LayoutInflater to restrict the set of Views
-         * that are allowed to be inflated.
-         *
-         * @param clazz The class object for the View that is about to be inflated
-         *
-         * @return True if this class is allowed to be inflated, or false otherwise
-         */
-        @SuppressWarnings("unchecked")
         boolean onLoadClass(Class clazz);
     }
 
     public interface Factory {
-        /**
-         * Hook you can supply that is called when inflating from a LayoutInflater.
-         * You can use this to customize the tag names available in your XML
-         * layout files.
-         *
-         * <p>
-         * Note that it is good practice to prefix these custom names with your
-         * package (i.e., com.coolcompany.apps) to avoid conflicts with system
-         * names.
-         *
-         * @param name Tag name to be inflated.
-         * @param context The context the view is being created in.
-         * @param attrs Inflation attributes as specified in XML file.
-         *
-         * @return View Newly created view. Return null for the default
-         *         behavior.
-         */
         @Nullable
         View onCreateView(@NonNull String name, @NonNull Context context,
                           @NonNull AttributeSet attrs);
     }
 
     public interface Factory2 extends Factory {
-        /**
-         * Version of {@link #onCreateView(String, Context, AttributeSet)}
-         * that also supplies the parent that the view created view will be
-         * placed in.
-         *
-         * @param parent The parent that the created view will be placed
-         * in; <em>note that this may be null</em>.
-         * @param name Tag name to be inflated.
-         * @param context The context the view is being created in.
-         * @param attrs Inflation attributes as specified in XML file.
-         *
-         * @return View Newly created view. Return null for the default
-         *         behavior.
-         */
         @Nullable
         View onCreateView(@Nullable View parent, @NonNull String name,
                           @NonNull Context context, @NonNull AttributeSet attrs);
@@ -242,29 +135,11 @@ public abstract class LayoutInflater {
         }
     }
 
-    /**
-     * Create a new LayoutInflater instance associated with a particular Context.
-     * Applications will almost always want to use
-     * {@link Context#getSystemService Context.getSystemService()} to retrieve
-     * the standard {@link Context#LAYOUT_INFLATER_SERVICE Context.INFLATER_SERVICE}.
-     *
-     * @param context The Context in which this LayoutInflater will create its
-     * Views; most importantly, this supplies the theme from which the default
-     * values for their attributes are retrieved.
-     */
     protected LayoutInflater(Context context) {
         mContext = context;
         initPrecompiledViews();
     }
 
-    /**
-     * Create a new LayoutInflater instance that is a copy of an existing
-     * LayoutInflater, optionally with its Context changed.  For use in
-     * implementing {@link #cloneInContext}.
-     *
-     * @param original The original LayoutInflater to copy.
-     * @param newContext The new Context to use.
-     */
     protected LayoutInflater(LayoutInflater original, Context newContext) {
         mContext = newContext;
         mFactory = original.mFactory;
@@ -274,9 +149,6 @@ public abstract class LayoutInflater {
         initPrecompiledViews();
     }
 
-    /**
-     * Obtains the LayoutInflater from the given context.
-     */
     public static LayoutInflater from(Context context) {
         LayoutInflater LayoutInflater =
                 (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
@@ -286,63 +158,20 @@ public abstract class LayoutInflater {
         return LayoutInflater;
     }
 
-    /**
-     * Create a copy of the existing LayoutInflater object, with the copy
-     * pointing to a different Context than the original.  This is used by
-     * {@link ContextThemeWrapper} to create a new LayoutInflater to go along
-     * with the new Context theme.
-     *
-     * @param newContext The new Context to associate with the new LayoutInflater.
-     * May be the same as the original Context if desired.
-     *
-     * @return Returns a brand spanking new LayoutInflater object associated with
-     * the given Context.
-     */
     public abstract LayoutInflater cloneInContext(Context newContext);
 
-    /**
-     * Return the context we are running in, for access to resources, class
-     * loader, etc.
-     */
     public Context getContext() {
         return mContext;
     }
 
-    /**
-     * Return the current {@link Factory} (or null). This is called on each element
-     * name. If the factory returns a View, add that to the hierarchy. If it
-     * returns null, proceed to call onCreateView(name).
-     */
     public final Factory getFactory() {
         return mFactory;
     }
 
-    /**
-     * Return the current {@link Factory2}.  Returns null if no factory is set
-     * or the set factory does not implement the {@link Factory2} interface.
-     * This is called on each element
-     * name. If the factory returns a View, add that to the hierarchy. If it
-     * returns null, proceed to call onCreateView(name).
-     */
     public final Factory2 getFactory2() {
         return mFactory2;
     }
 
-    /**
-     * Attach a custom Factory interface for creating views while using
-     * this LayoutInflater.  This must not be null, and can only be set once;
-     * after setting, you can not change the factory.  This is
-     * called on each element name as the xml is parsed. If the factory returns
-     * a View, that is added to the hierarchy. If it returns null, the next
-     * factory default {@link #onCreateView} method is called.
-     *
-     * <p>If you have an existing
-     * LayoutInflater and want to add your own factory to it, use
-     * {@link #cloneInContext} to clone the existing instance and then you
-     * can use this function (once) on the returned new instance.  This will
-     * merge your own factory with whatever factory the original instance is
-     * using.
-     */
     public void setFactory(Factory factory) {
         if (mFactorySet) {
             throw new IllegalStateException("A factory has already been set on this LayoutInflater");
@@ -358,10 +187,6 @@ public abstract class LayoutInflater {
         }
     }
 
-    /**
-     * Like {@link #setFactory}, but allows you to set a {@link Factory2}
-     * interface.
-     */
     public void setFactory2(Factory2 factory) {
         if (mFactorySet) {
             throw new IllegalStateException("A factory has already been set on this LayoutInflater");
@@ -377,10 +202,6 @@ public abstract class LayoutInflater {
         }
     }
 
-    /**
-     * @hide for use by framework
-     */
-    @UnsupportedAppUsage
     public void setPrivateFactory(Factory2 factory) {
         if (mPrivateFactory == null) {
             mPrivateFactory = factory;
@@ -389,23 +210,10 @@ public abstract class LayoutInflater {
         }
     }
 
-    /**
-     * @return The {@link Filter} currently used by this LayoutInflater to restrict the set of Views
-     * that are allowed to be inflated.
-     */
     public Filter getFilter() {
         return mFilter;
     }
 
-    /**
-     * Sets the {@link Filter} to by this LayoutInflater. If a view is attempted to be inflated
-     * which is not allowed by the {@link Filter}, the {@link #inflate(int, ViewGroup)} call will
-     * throw an {@link InflateException}. This filter will replace any previous filter set on this
-     * LayoutInflater.
-     *
-     * @param filter The Filter which restricts the set of Views that are allowed to be inflated.
-     *        This filter will replace any previous filter set on this LayoutInflater.
-     */
     public void setFilter(Filter filter) {
         mFilter = filter;
         if (filter != null) {
@@ -428,11 +236,11 @@ public abstract class LayoutInflater {
         }
 
         // Make sure the application allows code generation
-        ApplicationInfo appInfo = mContext.getApplicationInfo();
-        if (appInfo.isEmbeddedDexUsed() || appInfo.isPrivilegedApp()) {
-            mUseCompiledView = false;
-            return;
-        }
+//        ApplicationInfo appInfo = mContext.getApplicationInfo();
+//        if (appInfo.isEmbeddedDexUsed() || appInfo.isPrivilegedApp()) {
+//            mUseCompiledView = false;
+//            return;
+//        }
 
         // Try to load the precompiled layout file.
         try {
@@ -454,14 +262,6 @@ public abstract class LayoutInflater {
         if (!mUseCompiledView) {
             mPrecompiledClassLoader = null;
         }
-    }
-
-    /**
-     * @hide for use by CTS tests
-     */
-    @TestApi
-    public void setPrecompiledLayoutsEnabledForTesting(boolean enablePrecompiledLayouts) {
-        initPrecompiledViews(enablePrecompiledLayouts);
     }
 
     /**
@@ -542,7 +342,6 @@ public abstract class LayoutInflater {
             return null;
         }
 
-        Trace.traceBegin(Trace.TRACE_TAG_VIEW, "inflate (precompiled)");
 
         // Try to inflate using a precompiled layout.
         String pkg = res.getResourcePackageName(resource);
@@ -578,7 +377,6 @@ public abstract class LayoutInflater {
                 Log.e(TAG, "Failed to use precompiled view", e);
             }
         } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
         }
         return null;
     }
@@ -626,7 +424,6 @@ public abstract class LayoutInflater {
      */
     public View inflate(XmlPullParser parser, @Nullable ViewGroup root, boolean attachToRoot) {
         synchronized (mConstructorArgs) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "inflate");
 
             final Context inflaterContext = mContext;
             final AttributeSet attrs = Xml.asAttributeSet(parser);
@@ -711,20 +508,9 @@ public abstract class LayoutInflater {
                 mConstructorArgs[0] = lastContext;
                 mConstructorArgs[1] = null;
 
-                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
             }
 
             return result;
-        }
-    }
-
-    private static String getParserStateDescription(Context context, AttributeSet attrs) {
-        int sourceResId = Resources.getAttributeSetSourceResId(attrs);
-        if (sourceResId == Resources.ID_NULL) {
-            return attrs.getPositionDescription();
-        } else {
-            return attrs.getPositionDescription() + " in "
-                    + context.getResources().getResourceName(sourceResId);
         }
     }
 
@@ -806,7 +592,6 @@ public abstract class LayoutInflater {
         Class<? extends View> clazz = null;
 
         try {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW, name);
 
             if (constructor == null) {
                 // Class not found in the cache, see if it's real, and try to add it
@@ -816,7 +601,7 @@ public abstract class LayoutInflater {
                 if (mFilter != null && clazz != null) {
                     boolean allowed = mFilter.onLoadClass(clazz);
                     if (!allowed) {
-                        failNotAllowed(name, prefix, viewContext, attrs);
+                        // failNotAllowed(name, prefix, viewContext, attrs);
                     }
                 }
                 constructor = clazz.getConstructor(mConstructorSignature);
@@ -835,10 +620,10 @@ public abstract class LayoutInflater {
                         boolean allowed = clazz != null && mFilter.onLoadClass(clazz);
                         mFilterMap.put(name, allowed);
                         if (!allowed) {
-                            failNotAllowed(name, prefix, viewContext, attrs);
+                            // failNotAllowed(name, prefix, viewContext, attrs);
                         }
                     } else if (allowedState.equals(Boolean.FALSE)) {
-                        failNotAllowed(name, prefix, viewContext, attrs);
+                        // failNotAllowed(name, prefix, viewContext, attrs);
                     }
                 }
             }
@@ -861,16 +646,14 @@ public abstract class LayoutInflater {
             }
         } catch (NoSuchMethodException e) {
             final InflateException ie = new InflateException(
-                    getParserStateDescription(viewContext, attrs)
-                            + ": Error inflating class " + (prefix != null ? (prefix + name) : name), e);
+                            ": Error inflating class " + (prefix != null ? (prefix + name) : name), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
 
         } catch (ClassCastException e) {
             // If loaded class is not a View subclass
             final InflateException ie = new InflateException(
-                    getParserStateDescription(viewContext, attrs)
-                            + ": Class is not a View " + (prefix != null ? (prefix + name) : name), e);
+                    ": Class is not a View " + (prefix != null ? (prefix + name) : name), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
         } catch (ClassNotFoundException e) {
@@ -878,21 +661,12 @@ public abstract class LayoutInflater {
             throw e;
         } catch (Exception e) {
             final InflateException ie = new InflateException(
-                    getParserStateDescription(viewContext, attrs) + ": Error inflating class "
+                     ": Error inflating class "
                             + (clazz == null ? "<unknown>" : clazz.getName()), e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
         } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
         }
-    }
-
-    /**
-     * Throw an exception because the specified class is not allowed to be inflated.
-     */
-    private void failNotAllowed(String name, String prefix, Context context, AttributeSet attrs) {
-        throw new InflateException(getParserStateDescription(context, attrs)
-                + ": Class not allowed to be inflated "+ (prefix != null ? (prefix + name) : name));
     }
 
     /**
@@ -954,7 +728,6 @@ public abstract class LayoutInflater {
      * argument and should be used for everything except {@code &gt;include>}
      * tag parsing.
      */
-    @UnsupportedAppUsage
     private View createViewFromTag(View parent, String name, Context context, AttributeSet attrs) {
         return createViewFromTag(parent, name, context, attrs, false);
     }
@@ -974,7 +747,6 @@ public abstract class LayoutInflater {
      *                        attribute (if set) for the view being inflated,
      *                        {@code false} otherwise
      */
-    @UnsupportedAppUsage
     View createViewFromTag(View parent, String name, Context context, AttributeSet attrs,
                            boolean ignoreThemeAttr) {
         if (name.equals("view")) {
@@ -1014,15 +786,13 @@ public abstract class LayoutInflater {
 
         } catch (ClassNotFoundException e) {
             final InflateException ie = new InflateException(
-                    getParserStateDescription(context, attrs)
-                            + ": Error inflating class " + name, e);
+                            ": Error inflating class " + name, e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
 
         } catch (Exception e) {
             final InflateException ie = new InflateException(
-                    getParserStateDescription(context, attrs)
-                            + ": Error inflating class " + name, e);
+                            ": Error inflating class " + name, e);
             ie.setStackTrace(EMPTY_STACK_TRACE);
             throw ie;
         }
@@ -1044,16 +814,10 @@ public abstract class LayoutInflater {
      *                {@code parent} or base layout inflater context
      * @param attrs the attribute set for the XML tag used to define the view
      */
-    @UnsupportedAppUsage(trackingBug = 122360734)
     @Nullable
     public final View tryCreateView(@Nullable View parent, @NonNull String name,
                                     @NonNull Context context,
                                     @NonNull AttributeSet attrs) {
-        if (name.equals(TAG_1995)) {
-            // Let's party like it's 1995!
-            return new BlinkLayout(context, attrs);
-        }
-
         View view;
         if (mFactory2 != null) {
             view = mFactory2.onCreateView(parent, name, context, attrs);
@@ -1107,7 +871,6 @@ public abstract class LayoutInflater {
 
             if (TAG_REQUEST_FOCUS.equals(name)) {
                 pendingRequestFocus = true;
-                consumeChildElements(parser);
             } else if (TAG_TAG.equals(name)) {
                 parseViewTag(parser, parent, attrs);
             } else if (TAG_INCLUDE.equals(name)) {
@@ -1147,15 +910,12 @@ public abstract class LayoutInflater {
         final CharSequence value = ta.getText(R.styleable.ViewTag_value);
         view.setTag(key, value);
         ta.recycle();
-
-        consumeChildElements(parser);
     }
 
-    @UnsupportedAppUsage
     private void parseInclude(XmlPullParser parser, Context context, View parent,
                               AttributeSet attrs) throws XmlPullParserException, IOException {
-        int type;
 
+        int type;
         if (!(parent instanceof ViewGroup)) {
             throw new InflateException("<include /> can only be used inside of a ViewGroup");
         }
@@ -1217,8 +977,8 @@ public abstract class LayoutInflater {
                 }
 
                 if (type != XmlPullParser.START_TAG) {
-                    throw new InflateException(getParserStateDescription(context, childAttrs)
-                            + ": No start tag found!");
+                    throw new InflateException(
+                            ": No start tag found!");
                 }
 
                 final String childName = childParser.getName();
@@ -1282,79 +1042,6 @@ public abstract class LayoutInflater {
                 childParser.close();
             }
         }
-        LayoutInflater.consumeChildElements(parser);
     }
 
-    /**
-     * <strong>Note:</strong> default visibility so that
-     * LayoutInflater_Delegate can call it.
-     */
-    final static void consumeChildElements(XmlPullParser parser)
-            throws XmlPullParserException, IOException {
-        int type;
-        final int currentDepth = parser.getDepth();
-        while (((type = parser.next()) != XmlPullParser.END_TAG ||
-                parser.getDepth() > currentDepth) && type != XmlPullParser.END_DOCUMENT) {
-            // Empty
-        }
-    }
-
-    private static class BlinkLayout extends FrameLayout {
-        private static final int MESSAGE_BLINK = 0x42;
-        private static final int BLINK_DELAY = 500;
-
-        private boolean mBlink;
-        private boolean mBlinkState;
-        private final Handler mHandler;
-
-        public BlinkLayout(Context context, AttributeSet attrs) {
-            super(context, attrs);
-            mHandler = new Handler(new Handler.Callback() {
-                @Override
-                public boolean handleMessage(Message msg) {
-                    if (msg.what == MESSAGE_BLINK) {
-                        if (mBlink) {
-                            mBlinkState = !mBlinkState;
-                            makeBlink();
-                        }
-                        invalidate();
-                        return true;
-                    }
-                    return false;
-                }
-            });
-        }
-
-        private void makeBlink() {
-            Message message = mHandler.obtainMessage(MESSAGE_BLINK);
-            mHandler.sendMessageDelayed(message, BLINK_DELAY);
-        }
-
-        @Override
-        protected void onAttachedToWindow() {
-            super.onAttachedToWindow();
-
-            mBlink = true;
-            mBlinkState = true;
-
-            makeBlink();
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            super.onDetachedFromWindow();
-
-            mBlink = false;
-            mBlinkState = true;
-
-            mHandler.removeMessages(MESSAGE_BLINK);
-        }
-
-        @Override
-        protected void dispatchDraw(Canvas canvas) {
-            if (mBlinkState) {
-                super.dispatchDraw(canvas);
-            }
-        }
-    }
 }
